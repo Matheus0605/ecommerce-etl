@@ -1,0 +1,35 @@
+﻿version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: etl_dw
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: etl_dw
+      DATA_DIR: /data/raw
+      SILVER_DIR: /data/silver
+      GOLD_DIR: /data/gold
+      METRICS_DIR: /data/metrics
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./:/app
+      - ./data:/data
+
+volumes:
+  pgdata:

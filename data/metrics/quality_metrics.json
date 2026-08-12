@@ -1,0 +1,11 @@
+{
+  "customers_total": 1000,
+  "customers_valid": 1000,
+  "customers_quarantine": 0,
+  "products_total": 5000,
+  "products_valid": 5000,
+  "products_quarantine": 0,
+  "orders_total": 10000,
+  "orders_valid": 10000,
+  "orders_quarantine": 0
+}

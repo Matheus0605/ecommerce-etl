@@ -1,465 +1,201 @@
 # 🛒 E-commerce ETL Pipeline
 
-Pipeline ETL desenvolvido em **Python** para ingestão, profiling, validação, transformação e preparação de dados de um cenário de e-commerce.
+Este repositório contém um pipeline ETL em Python que simula um ambiente de e-commerce com geração volumétrica de dados, profiling, validações de qualidade, transformação, escrita em camada Silver (Parquet) e carga em um modelo dimensional (Postgres - Gold).
 
-O projeto simula um ambiente de dados com **10 mil clientes, 50 mil produtos e 1 milhão de pedidos**, incluindo a geração proposital de inconsistências para demonstrar práticas de **Data Quality, tratamento de dados inválidos, quarantine e testes automatizados**.
+O objetivo principal é demonstrar boas práticas de engenharia de dados: separação de responsabilidades, testes automatizados, quarantine (registros inválidos), geração de métricas e observability mínima com um dashboard.
 
----
+Principais componentes implementados:
 
-## 🎯 Objetivo
-
-Construir um pipeline ETL capaz de:
-
-* Extrair grandes volumes de dados em CSV;
-* Realizar Data Profiling;
-* Identificar problemas de qualidade;
-* Validar integridade referencial;
-* Aplicar regras de negócio;
-* Separar registros inválidos;
-* Transformar e enriquecer dados;
-* Calcular métricas derivadas;
-* Automatizar validações com Pytest;
-* Preparar os dados para uma etapa posterior de carga em banco de dados.
+- Gerador de dados (Faker) com injeção de inconsistências;
+- Extractors/Transformers em pandas;
+- Data Quality (regras, integridade referencial, quarantine);
+- Escrita Silver em Parquet;
+- Modelo dimensional (dim/fact) e carregamento em Postgres (Gold);
+- Orquestração básica com Prefect (fluxo local); fallback para execução sequencial quando Prefect não estiver disponível;
+- Logging estruturado (JSON) e métricas de qualidade (arquivo JSON);
+- Dashboard rápido em Streamlit para inspeção de métricas;
+- Docker + docker-compose para ambiente local (Postgres + app);
+- CI básico (GitHub Actions) rodando testes e build de imagem.
 
 ---
 
-## 🏗️ Arquitetura
-
-```text
-                    ┌─────────────────┐
-                    │  Data Generator │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │   CSV / RAW     │
-                    │                 │
-                    │ Customers       │
-                    │ Products        │
-                    │ Orders          │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │ Data Profiling  │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  Data Quality   │
-                    │                 │
-                    │ Nulls           │
-                    │ Duplicates      │
-                    │ Referential     │
-                    │ Business Rules  │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │   Transform     │
-                    │                 │
-                    │ Customers       │
-                    │ Products        │
-                    │ Orders          │
-                    └────────┬────────┘
-                             │
-                 ┌───────────┴───────────┐
-                 ▼                       ▼
-          ┌─────────────┐         ┌─────────────┐
-          │    CLEAN    │         │  QUARANTINE │
-          │    DATA     │         │    DATA     │
-          └─────────────┘         └─────────────┘
-```
+Índice
+- [Pré-requisitos](#pré-requisitos)
+- [Quickstart (local)](#quickstart-local)
+- [Rodando com Docker Compose](#rodando-com-docker-compose)
+- [Executando o pipeline](#executando-o-pipeline)
+- [Camadas Silver / Gold](#camadas-silver--gold)
+- [Dashboard](#dashboard)
+- [CI / Tests](#ci--tests)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Roadmap e próximos passos](#roadmap-e-próximos-passos)
+- [Contribuindo](#contribuindo)
+- [Licença](#licença)
 
 ---
 
-## 📊 Volume de dados
+## Pré-requisitos
 
-| Dataset   | Registros |
-| --------- | --------: |
-| Customers |   10.000+ |
-| Products  |    50.000 |
-| Orders    | 1.000.000 |
+- Python 3.11
+- Git
+- (Opcional) Docker Desktop para ambiente local com Postgres e um container do app
 
-Os dados são gerados automaticamente para permitir testes com volume significativo sem depender de dados reais.
+Recomenda-se trabalhar com virtualenv (.venv) para isolar dependências.
 
 ---
 
-## 🔎 Data Profiling
+## Quickstart (local)
 
-O pipeline realiza uma análise inicial dos datasets verificando:
-
-* Quantidade de registros;
-* Quantidade de colunas;
-* Tipos de dados;
-* Valores nulos;
-* Registros duplicados;
-* Integridade dos identificadores.
-
-Exemplo:
-
-```text
-DATASET: ORDERS
-
-Linhas: 1,000,000
-Colunas: 6
-
-Valores nulos:
-id             0
-cliente_id     0
-produto_id     0
-quantidade     0
-data_pedido    0
-status         0
-
-Registros duplicados: 0
-```
-
----
-
-## 🛡️ Data Quality
-
-O projeto possui uma etapa específica para identificar inconsistências nos dados.
-
-### Integridade referencial
-
-São verificadas relações como:
-
-```text
-orders.cliente_id → customers.id
-orders.produto_id → products.id
-```
-
-### Regras de negócio
-
-Também são verificadas regras como:
-
-```text
-preço > 0
-estoque >= 0
-quantidade > 0
-```
-
-Durante os testes de qualidade foram introduzidas inconsistências propositalmente.
-
-Resultado identificado:
-
-```text
-Pedidos com cliente inexistente: 100
-Pedidos com produto inexistente: 0
-
-Produtos com preço inválido: 50
-Produtos com estoque inválido: 50
-
-Pedidos com quantidade inválida: 100
-```
-
----
-
-## 🧪 Testes automatizados
-
-O projeto utiliza **Pytest** para validar as principais etapas do pipeline.
-
-Atualmente:
-
-```text
-10 passed
-```
-
-Os testes cobrem:
-
-* Extração de CSV;
-* Transformação de Customers;
-* Transformação de Products;
-* Transformação de Orders;
-* Regras de negócio;
-* Quarantine;
-* Integridade dos relacionamentos;
-* Cálculo do valor total dos pedidos.
-
-Execução:
+1. Clone o repositório:
 
 ```bash
-python -m pytest
+git clone https://github.com/Matheus0605/ecommerce-etl.git
+cd ecommerce-etl
 ```
 
-Resultado:
+2. Crie e ative um virtualenv (Windows):
 
-```text
-10 passed
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+3. Instale dependências:
+
+```bash
+pip install -r requirements.txt
+```
+
+4. Gere dados (padrão: 10k customers, 50k products, 1M orders). Para smoke tests, reduza com variáveis de ambiente:
+
+```powershell
+# Exemplo (Windows PowerShell) — gera 1k / 5k / 10k
+$env:CUSTOMER_QTY='1000'; $env:PRODUCT_QTY='5000'; $env:ORDER_QTY='10000'; .venv\Scripts\python.exe -m src.generators.generate_data
+```
+
+Os CSVs de entrada serão gravados em `data/raw/`.
+
+---
+
+## Rodando com Docker Compose
+
+Há um setup docker-compose que cria um Postgres e o container da aplicação (Streamlit) para facilitar testes locais.
+
+Credenciais (dev):
+- POSTGRES_USER: postgres
+- POSTGRES_PASSWORD: postgres
+- POSTGRES_DB: etl_dw
+
+Subir o ambiente:
+
+```bash
+# Em sistemas modernos com o plugin docker-compose use:
+docker compose up --build
+# Ou, se seu sistema tiver o wrapper antigo:
+docker-compose up --build
+```
+
+- Streamlit (dashboard) ficará exposto em `http://127.0.0.1:8501`.
+- O volume `./data` é montado no container para que Parquet/metrics fiquem acessíveis localmente.
+
+> Nota: no Windows, se `http://localhost:8501` não abrir, tente `http://127.0.0.1:8501` — há diferenças de resolução de IPv6/IPv4 em alguns ambientes.
+
+---
+
+## Executando o pipeline
+
+Existem duas formas principais:
+
+1. Execução simples (sequencial / dev):
+
+```bash
+python -m src.pipeline.flow
+```
+
+O código aceita rodar mesmo quando o Postgres não estiver disponível — nesse caso o pipeline escreve arquivos Parquet em `data/silver/` e gera `data/metrics/quality_metrics.json`.
+
+2. Com Prefect (orquestrador):
+
+- O módulo `src/pipeline/flow.py` usa Prefect quando disponível. Para ambientes com Prefect Server/Cloud, registre o flow conforme sua infraestrutura.
+
+---
+
+## Camadas Silver / Gold
+
+- Silver: arquivos Parquet em `data/silver/` (customers.parquet, products.parquet, orders.parquet). São artefatos enriquecidos e validados, prontos para consumo analítico.
+- Gold: modelo dimensional carregado em Postgres (tabelas `dim_customers`, `dim_products`, `fact_orders`).
+
+Observações:
+- A carga para Postgres atualmente usa um wrapper `load_dataframe` baseado em `pandas.to_sql` para simplicidade. Para produção recomenda-se usar `COPY FROM` ou loaders em massa.
+- Dimensional model definido em `src/models/dim_models.py` e criado via SQLAlchemy (função `create_all_tables`).
+
+---
+
+## Dashboard
+
+Um dashboard simples em Streamlit (`src/dashboard/quality_dashboard.py`) lê `data/metrics/quality_metrics.json` e exibe métricas de qualidade do último run.
+
+Executar localmente:
+
+```bash
+# preferível rodar via streamlit
+streamlit run src/dashboard/quality_dashboard.py --server.address 127.0.0.1
+```
+
+Problemas comuns:
+- Se `localhost:8501` não abrir, tente `127.0.0.1:8501`.
+
+---
+
+## CI / Tests
+
+- Workflow GitHub Actions em `.github/workflows/ci.yml` roda `pytest` e constrói a imagem Docker (sem push). 
+- Para rodar os testes localmente:
+
+```bash
+python -m pytest -q
 ```
 
 ---
 
-## 🔄 Transformações
+## Estrutura do projeto
 
-### Customers
-
-São aplicadas validações relacionadas aos clientes e seus dados cadastrais.
-
-### Products
-
-São validados:
-
-```text
-preço
-estoque
 ```
-
-Produtos inválidos são direcionados para quarantine.
-
-### Orders
-
-Os pedidos são enriquecidos através do relacionamento com Products.
-
-O pipeline calcula:
-
-```text
-valor_total = quantidade × preco_unitario
-```
-
-Exemplo:
-
-```text
-Produto: Notebook
-Quantidade: 2
-Preço unitário: R$ 3.500,00
-
-Valor total:
-R$ 7.000,00
-```
-
----
-
-## 🚨 Quarantine
-
-Registros que não atendem às regras críticas de qualidade são separados do fluxo principal.
-
-Exemplo de motivos:
-
-```text
-customer_not_found
-product_not_found
-invalid_quantity
-invalid_price
-invalid_stock
-```
-
-Isso permite preservar os dados inválidos para posterior investigação, em vez de simplesmente descartá-los.
-
----
-
-## 📈 Execução atual
-
-Com os dados inconsistentes inseridos propositalmente, o pipeline apresentou:
-
-```text
-Customers: 10,020
-Products: 50,000
-Orders: 1,000,000
-
-Customers válidos: 9,950
-Customers quarantine: 70
-
-Products válidos: 49,900
-Products quarantine: 100
-
-Orders válidos: 992,899
-Orders quarantine: 7,101
-```
-
-Principais motivos encontrados:
-
-```text
-customer_not_found    5,042
-product_not_found     1,961
-invalid_quantity         98
-```
-
-Esse resultado também revelou um importante efeito de propagação de problemas de qualidade entre datasets relacionados, que será tratado nas próximas etapas da arquitetura.
-
----
-
-## 📁 Estrutura do projeto
-
-```text
-ecommerce-etl/
-│
-├── data/
-│
+├── data/                       # raw, silver, gold artifacts (gerados)
 ├── src/
-│   │
-│   ├── extract/
-│   │   └── csv_extractor.py
-│   │
-│   ├── generators/
-│   │   ├── generate_data.py
-│   │   └── inject_errors.py
-│   │
-│   ├── profiling/
-│   │   ├── profile_data.py
-│   │   └── data_quality.py
-│   │
-│   ├── transform/
-│   │   ├── customers.py
-│   │   ├── products.py
-│   │   └── orders.py
-│   │
-│   └── pipeline/
-│       └── transform_pipeline.py
-│
-├── tests/
-│   ├── test_extract.py
-│   ├── test_transform_customers.py
-│   ├── test_transform_products.py
-│   └── test_transform_orders.py
-│
-├── .gitignore
+│   ├── extract/                # leitores (CSV)
+│   ├── generators/             # geradores de dados e injeção de erros
+│   ├── profiling/              # scripts de profiling e data quality
+│   ├── transform/              # transformers por entidade
+│   ├── pipeline/               # flow / pipeline orchestration
+│   ├── load/                   # loaders (Postgres helper)
+│   └── utils/                  # logging, config
+├── tests/                      # pytest
+├── Dockerfile
+├── docker-compose.yml
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## ⚙️ Tecnologias
+## Como contribuir
 
-* **Python 3.11**
-* **Pandas**
-* **Pytest**
-* **Faker**
-* **CSV**
-* **Git / GitHub**
+1. Abra uma issue descrevendo a proposta.
+2. Crie uma branch com um nome descritivo.
+3. Submeta um Pull Request com testes e documentação.
 
----
-
-## 🚀 Como executar
-
-### 1. Clonar o projeto
-
-```bash
-git clone https://github.com/Matheus0605/ecommerce-etl.git
-```
-
-```bash
-cd ecommerce-etl
-```
-
-### 2. Criar ambiente virtual
-
-Windows:
-
-```bash
-python -m venv .venv
-```
-
-Ativar:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-### 3. Instalar dependências
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Gerar os dados
-
-```bash
-python src/generators/generate_data.py
-```
-
-### 5. Inserir inconsistências
-
-```bash
-python src/generators/inject_errors.py
-```
-
-### 6. Executar Data Profiling
-
-```bash
-python src/profiling/profile_data.py
-```
-
-### 7. Executar Data Quality
-
-```bash
-python src/profiling/data_quality.py
-```
-
-### 8. Executar os testes
-
-```bash
-python -m pytest
-```
-
-### 9. Executar o pipeline
-
-```bash
-python -m src.pipeline.transform_pipeline
-```
+Siga as práticas padrão de GitHub: commits pequenos, PRs atômicos e mensagens claras.
 
 ---
 
-## 🧠 Conceitos demonstrados
+## Licença
 
-Este projeto foi desenvolvido com foco em conceitos utilizados em ambientes reais de engenharia e análise de dados:
-
-* ETL;
-* Data Profiling;
-* Data Quality;
-* Integridade referencial;
-* Regras de negócio;
-* Data Transformation;
-* Data Enrichment;
-* Quarantine;
-* Testes automatizados;
-* Processamento de grandes volumes;
-* Separação de responsabilidades;
-* Rastreabilidade de problemas;
-* Validação de pipelines.
+Este projeto está aberto para uso educacional. Adicione aqui a licença desejada (por exemplo MIT) se quiser publicar.
 
 ---
 
-## 🔮 Próximas etapas
+## Autor
 
-O projeto continuará evoluindo para uma arquitetura ETL mais próxima de um ambiente produtivo.
+Matheus Pinheiro — https://github.com/Matheus0605
 
-### Roadmap
-
-* [x] Geração dos datasets
-* [x] Injeção de inconsistências
-* [x] Data Profiling
-* [x] Data Quality
-* [x] Extract
-* [x] Transform Customers
-* [x] Transform Products
-* [x] Transform Orders
-* [x] Testes automatizados
-* [ ] Classificação `VALID / WARNING / QUARANTINE`
-* [ ] Métricas de performance
-* [ ] Logging estruturado
-* [ ] Load em PostgreSQL
-* [ ] Modelagem dimensional
-* [ ] Camada Silver / Gold
-* [ ] Docker
-* [ ] Orquestração do pipeline
-* [ ] Monitoramento
-* [ ] CI/CD
-* [ ] Dashboard de qualidade dos dados
-
----
-
-## 👨‍💻 Autor
-
-**Matheus Pinheiro**
-
-Projeto desenvolvido como estudo prático de **Python, ETL, Data Quality, testes automatizados e engenharia de dados**.
-
-GitHub:
-
-https://github.com/Matheus0605
-
-```
-```

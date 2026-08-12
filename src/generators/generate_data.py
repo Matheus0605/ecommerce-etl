@@ -1,5 +1,6 @@
 from pathlib import Path
 import random
+import os
 
 import pandas as pd
 from faker import Faker
@@ -107,9 +108,10 @@ def main():
         exist_ok=True,
     )
 
-    customer_quantity = 10_000
-    product_quantity = 50_000
-    order_quantity = 1_000_000
+    # Default sizes; can be overridden with environment variables for smoke tests
+    customer_quantity = int(os.getenv('CUSTOMER_QTY', '10000'))
+    product_quantity = int(os.getenv('PRODUCT_QTY', '50000'))
+    order_quantity = int(os.getenv('ORDER_QTY', '1000000'))
 
     customers = generate_customers(customer_quantity)
 
