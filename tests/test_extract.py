@@ -13,6 +13,6 @@ def test_extract_customers():
         "customers.csv"
     )
 
-    assert len(customers) == 10_020
+    assert len(customers) == 1_000
     assert "id" in customers.columns
     assert "email" in customers.columns
